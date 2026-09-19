@@ -8,6 +8,14 @@
 Это мод Claude Code на **function hooks** (ранний доступ): TypeScript, который выполняется внутри
 процесса Claude Code. API может меняться между релизами.
 
+![Кадр игры в размере полосы над строкой ввода](docs/img/band.png)
+
+Кадр выше — то, что рисуется в полосе над строкой ввода (предпросмотр `npm run preview` в полном
+цвете; в терминале на 256 цветов оттенки грубее). Ниже — тот же мир тем же рендером, но в большом
+разрешении, которого в терминале нет: он показывает, как устроен мир, а не как выглядит игра.
+
+![Тот же мир в большом разрешении — не вид из терминала](docs/img/world.png)
+
 ## Что нужно
 
 - Claude Code 2.1.269 или новее и переменная `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1`.
@@ -36,17 +44,19 @@
 
    Это включает модули хуков у всех установленных плагинов, а не только у этого.
 
-2. **Поставить плагин из папки** — она сама себе marketplace:
+2. **Поставить плагин с GitHub** — репозиторий сам себе marketplace (каталог плагинов из одного плагина):
 
    ```sh
-   claude plugin marketplace add /путь/к/minecraft
+   claude plugin marketplace add swan4er/claude-mine
    claude plugin install claude-mine@claude-mine
    ```
 
 3. **Проверить.** `claude plugin list` показывает `claude-mine@claude-mine … enabled`. Перезапустить
    `claude` в терминале, выполнить `/tui fullscreen`, затем `/mine`.
 
-Без установки, на один запуск: `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude --plugin-dir /путь/к/minecraft`.
+Из своей копии (для правок): `git clone https://github.com/swan4er/claude-mine`, дальше те же две команды, но
+вместо `swan4er/claude-mine` — путь к папке. Без установки, на один запуск:
+`CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude --plugin-dir /путь/к/claude-mine`.
 
 Обновление: установленный плагин — копия в `~/.claude/plugins/cache/`; менеджер сравнивает номер
 версии. Поднять `version` в `.claude-plugin/plugin.json` → `claude plugin marketplace update claude-mine`
