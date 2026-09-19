@@ -52,6 +52,8 @@ export function newGame(seed: number): Game {
 
 const touch = (g: Game) => { g.version++ }
 const say = (g: Game, note: string) => { g.note = note; g.noteAt = g.ticks; touch(g) }
+// сообщение игроку от вида (например, о переполненном сохранении)
+export const notify = (g: Game, note: string) => say(g, note)
 export const heldItem = (g: Game): number | undefined => g.inventory[g.selected]?.item
 export const eyeOf = (p: Player) => ({ x: p.x, y: p.y + EYE, z: p.z })
 

@@ -3,7 +3,7 @@ import type { ClientSurface } from 'claude-code'
 import { ITEMS } from './game/blocks.ts'
 import { RECIPES, missing } from './game/craft.ts'
 import {
-  TICK_MS, actCraft, actCursor, actJump, actLook, actMenu, actMine, actPlace, actSelect, actTilt, actTurn, actWalk, advance, eyeOf, fromSave, toSave,
+  TICK_MS, actCraft, actCursor, actJump, actLook, actMenu, actMine, actPlace, actSelect, actTilt, actTurn, actWalk, advance, eyeOf, fromSave, notify, toSave,
   type Game,
 } from './game/game.ts'
 import { HOTBAR } from './game/inventory.ts'
@@ -73,7 +73,7 @@ export default function View(props: Props, surface: ClientSurface<State>) {
         if (JSON.stringify(save).length <= MAX_SAVE_CHARS) {
           surface.post({ save })
           live.game.dirty = false
-        }
+        } else notify(live.game, 'сохранение переполнено: новые изменения мира не сохраняются (/mine new — новый мир)')
         live.savedAt = now
       }
       // стоячий мир не перерисовывается
