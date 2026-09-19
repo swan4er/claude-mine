@@ -50,7 +50,8 @@ export function treeAt(seed: number, x: number, z: number): number {
   const tz = cellZ * TREE_CELL + 1 + Math.floor(hash2(cellX, cellZ, seed + 14) * (TREE_CELL - 2))
   if (tx !== x || tz !== z) return 0
   if (isSandy(surfaceHeight(seed, x, z))) return 0
-  return 4 + Math.floor(hash2(x, z, seed + 15) * 3)
+  // не ниже пяти: нижний слой кроны висит на два блока ниже верхушки, и под деревом должно быть можно пройти
+  return 5 + Math.floor(hash2(x, z, seed + 15) * 3)
 }
 
 // форма кроны относительно верхушки ствола (dy = 0): радиус по слоям

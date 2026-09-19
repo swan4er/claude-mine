@@ -10,7 +10,11 @@ const world = newWorld(seed)
 let best = { x: 0, z: 0, h: 0 }
 for (let z = -40; z <= 40; z++) for (let x = -40; x <= 40; x++) {
   const h = surfaceHeight(seed, x, z)
-  if (h > best.h && !treeAt(seed, x, z)) best = { x, z, h }
+  if (h <= best.h) continue
+  // без деревьев рядом, иначе полкадра займёт крона
+  let clear = true
+  for (let dz = -6; dz <= 6 && clear; dz++) for (let dx = -6; dx <= 6; dx++) if (treeAt(seed, x + dx, z + dz)) clear = false
+  if (clear) best = { x, z, h }
 }
 const cam = { x: best.x + 0.5, y: best.h + 1.62, z: best.z + 0.5, yaw: Math.atan2(-best.x, -best.z), pitch: (-14 * Math.PI) / 180 }
 mkdirSync('preview', { recursive: true })

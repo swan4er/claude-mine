@@ -4,9 +4,9 @@
 // Цвета намеренно «ступенчатые»: затенение граней и туман квантованы, у неба несколько полос.
 // Кадр в терминале — это отрезки одного цвета, и их число ограничено (docs/probes.md): чем больше
 // соседних пикселей совпадает, тем дешевле кадр.
-import { BLOCKS, type Rgb } from './blocks.ts'
 import { cast } from './raycast.ts'
-import type { World } from './world.ts'
+import { AIR, BLOCKS, type Rgb } from './blocks.ts'
+import { getBlock, type World } from './world.ts'
 
 export type Camera = { x: number; y: number; z: number; yaw: number; pitch: number }
 export type Target = { x: number; y: number; z: number }
@@ -37,6 +37,10 @@ const SHADE = { top: 1, bottom: 0.5, x: 0.82, z: 0.66 }
 // кадр рассыпается на слишком много отрезков
 const GRID_NEAR = 9
 const GRID_CONTRAST = 0.06
+// у подножия уступа верхняя грань темнее: на однотонной траве иначе не видно перепадов высоты
+const LEDGE_WIDTH = 0.3
+const LEDGE_SHADE = 0.74
+const LEDGE_FAR = 40
 
 const pack = (r: number, g: number, b: number) => ((r & 255) << 16) | ((g & 255) << 8) | (b & 255)
 const clamp = (v: number) => (v < 0 ? 0 : v > 255 ? 255 : v)
@@ -90,6 +94,18 @@ export function renderFrame(world: World, cam: Camera, w: number, h: number, opt
       const base = hit.ny > 0 ? def.top : hit.ny < 0 ? def.bottom : def.side
       let light = hit.ny > 0 ? SHADE.top : hit.ny < 0 ? SHADE.bottom : hit.nx !== 0 ? SHADE.x : SHADE.z
       if (hit.dist < GRID_NEAR && ((hit.x + hit.y + hit.z) & 1)) light *= 1 - GRID_CONTRAST
+      if (hit.ny > 0 && hit.dist < LEDGE_FAR) {
+        // точка попадания внутри блока; сосед на блок выше с той стороны, к краю которой она ближе
+        const hx = cam.x + dx * hit.dist - hit.x
+        const hz = cam.z + dz * hit.dist - hit.z
+        const above = hit.y + 1
+        if (
+          (hx < LEDGE_WIDTH && getBlock(world, hit.x - 1, above, hit.z) !== AIR) ||
+          (hx > 1 - LEDGE_WIDTH && getBlock(world, hit.x + 1, above, hit.z) !== AIR) ||
+          (hz < LEDGE_WIDTH && getBlock(world, hit.x, above, hit.z - 1) !== AIR) ||
+          (hz > 1 - LEDGE_WIDTH && getBlock(world, hit.x, above, hit.z + 1) !== AIR)
+        ) light *= LEDGE_SHADE
+      }
       if (target && hit.x === target.x && hit.y === target.y && hit.z === target.z) light *= 1.28 - progress * 0.6
       // туман ступенями: дальние блоки растворяются в цвете горизонта
       const fog = Math.floor(Math.min(0.999, Math.max(0, (hit.dist - maxDist * 0.35) / (maxDist * 0.65))) * FOG_STEPS) / FOG_STEPS
