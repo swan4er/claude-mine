@@ -1,0 +1,7 @@
+{
+  "name": "claude-mine",
+  "version": "0.1.0",
+  "description": "Воксельная песочница над строкой ввода Claude Code: бесконечный мир с холмами и деревьями, добыча и установка блоков, инвентарь, крафт инструментов. /mine открывает и закрывает. Нужны function hooks (ранний доступ) и терминал в режиме /tui fullscreen.",
+  "author": { "name": "Станислав" },
+  "keywords": ["game", "voxel", "sandbox", "terminal", "tui", "function-hooks", "mod"]
+}
