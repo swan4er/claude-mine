@@ -7,6 +7,7 @@ import {
   type Game,
 } from './game/game.ts'
 import { HOTBAR } from './game/inventory.ts'
+import { DEFAULT_SENSITIVITY, SENSITIVITIES, edgeTurn, lookDelta, type LookView, type Pointer } from './game/mouselook.ts'
 import { DEFAULT_FOV, renderFrame } from './game/render.ts'
 import { toRows, type Packed } from './game/runs.ts'
 
@@ -20,24 +21,24 @@ import { toRows, type Packed } from './game/runs.ts'
 type Props = { save?: unknown; seed?: number; done?: number; mouse?: boolean; rows?: number } | undefined
 // В состоянии поверхности только простые значения: движок вправе заморозить или скопировать его, а игра —
 // изменяемый объект с кэшем чанков. version — какую версию игры видел последний кадр.
-type State = { version: number; seenDone: number; banner: boolean; squash: number; mouseLook: boolean }
+type State = { version: number; seenDone: number; banner: boolean; squash: number; mouseLook: boolean; sens: number }
 // игра и её часы живут в модуле; clock — момент, до которого игра просчитана (мс)
-let live: { game: Game; clock: number; savedAt: number } | undefined
+// pointer — где мышь была в прошлый раз (взгляд поворачивается на её смещение); tickAt — прошлый кадр таймера
+let live: { game: Game; clock: number; savedAt: number; pointer?: Pointer; tickAt: number } | undefined
 
 // во сколько раз картинка сжата по вертикали: полоса низкая, сжатие расширяет обзор (клавиша v)
 const SQUASH = [1.5, 2, 1]
 const SAVE_EVERY_MS = 10_000
 // сохранение уходит хукам одним сообщением, а сообщение ограничено ~100 000 символов
 const MAX_SAVE_CHARS = 95_000
-const MOUSE_PULL = 0.3
 
-type Action = 'forward' | 'back' | 'left' | 'right' | 'turnLeft' | 'turnRight' | 'tiltUp' | 'tiltDown' | 'jump' | 'mine' | 'place' | 'menu' | 'view' | 'mouse' | 'confirm'
+type Action = 'forward' | 'back' | 'left' | 'right' | 'turnLeft' | 'turnRight' | 'tiltUp' | 'tiltDown' | 'jump' | 'mine' | 'place' | 'menu' | 'view' | 'mouse' | 'slower' | 'faster' | 'confirm'
 // та же клавиша в русской раскладке: ц = w, ф = a, ы = s, в = d, й = q, у = e, ш = i, м = v, ь = m
 const KEYS: Record<string, Action> = {
   w: 'forward', ц: 'forward', s: 'back', ы: 'back', a: 'left', ф: 'left', d: 'right', в: 'right',
   left: 'turnLeft', right: 'turnRight', up: 'tiltUp', down: 'tiltDown',
   ' ': 'jump', space: 'jump', q: 'mine', й: 'mine', e: 'place', у: 'place',
-  i: 'menu', ш: 'menu', tab: 'menu', v: 'view', м: 'view', m: 'mouse', ь: 'mouse', return: 'confirm',
+  i: 'menu', ш: 'menu', tab: 'menu', v: 'view', м: 'view', m: 'mouse', ь: 'mouse', '[': 'slower', х: 'slower', ']': 'faster', ъ: 'faster', return: 'confirm',
 }
 
 // кадр пересчитывается только когда изменилась игра или размер: стоячий мир не стоит ничего
@@ -50,6 +51,9 @@ export default function View(props: Props, surface: ClientSurface<State>) {
   // две нижние строки — хотбар и статус
   const viewRows = rows - 2
 
+  const lookView = (s: State): LookView => ({
+    columns: Math.max(20, surface.columns || 100), rows: Math.max(2, (surface.rows || 12) - 2), squash: SQUASH[s.squash], fov: DEFAULT_FOV,
+  })
   const act = (fn: (g: Game) => void) => {
     const s = surface.state
     if (!s || !live) return
@@ -59,15 +63,21 @@ export default function View(props: Props, surface: ClientSurface<State>) {
 
   if (surface.state === undefined) {
     // новый экземпляр поверхности — новая игра из сохранения (или новый мир после /mine new)
-    live = { game: fromSave(props?.save, props?.seed ?? 1), clock: Date.now(), savedAt: Date.now() }
+    live = { game: fromSave(props?.save, props?.seed ?? 1), clock: Date.now(), savedAt: Date.now(), tickAt: Date.now() }
     cache = undefined
-    surface.setState({ version: 0, seenDone: props?.done ?? 0, banner: false, squash: 0, mouseLook: true })
+    surface.setState({ version: 0, seenDone: props?.done ?? 0, banner: false, squash: 0, mouseLook: true, sens: DEFAULT_SENSITIVITY })
     surface.every(TICK_MS, () => {
       const s = surface.state
       if (!s || !live) return
       const now = Date.now()
       // таймер кадров приходит реже и неровнее TICK_MS: шагов логики делается столько, сколько реально прошло времени
       live.clock = advance(live.game, live.clock, now)
+      // указатель у края поля: взгляд доворачивается сам (мышь дальше края не уедет)
+      if (s.mouseLook && !live.game.menu) {
+        const edge = edgeTurn(live.pointer, lookView(s), now, now - live.tickAt)
+        if (edge.dyaw || edge.dpitch) actLook(live.game, edge.dyaw * SENSITIVITIES[s.sens], edge.dpitch * SENSITIVITIES[s.sens])
+      }
+      live.tickAt = now
       if (live.game.dirty && now - live.savedAt >= SAVE_EVERY_MS) {
         const save = toSave(live.game)
         if (JSON.stringify(save).length <= MAX_SAVE_CHARS) {
@@ -109,21 +119,27 @@ export default function View(props: Props, surface: ClientSurface<State>) {
       else if (action === 'menu') act(actMenu)
       else if (action === 'view') surface.setState({ ...s, squash: (s.squash + 1) % SQUASH.length, version: -1 })
       else if (action === 'mouse') surface.setState({ ...s, mouseLook: !s.mouseLook })
+      else if (action === 'slower' || action === 'faster') {
+        const sens = Math.max(0, Math.min(SENSITIVITIES.length - 1, s.sens + (action === 'faster' ? 1 : -1)))
+        notify(live.game, `чувствительность мыши ×${SENSITIVITIES[sens]} · [ медленнее · ] быстрее`)
+        surface.setState({ ...s, sens, version: live.game.version })
+      }
     }
     surface.onKey(({ key }) => onKey(key))
     surface.onPointer(ev => {
       const s = surface.state
       if (!s || !live || live.game.menu) return
       if (ev.type === 'down') return act(ev.button === 'right' ? actPlace : actMine)
-      // движение мыши над полем (без кнопки) тянет взгляд к указателю
+      // движение мыши над полем (без кнопки) поворачивает взгляд на её смещение — см. game/mouselook.ts
+      // ушла с поля или вернулась: смещение считать не от чего, доворот у края прекращается
+      if (ev.type === 'enter' || ev.type === 'leave') return void (live.pointer = undefined)
       if (ev.type !== 'move' || !s.mouseLook) return
-      const w = Math.max(20, surface.columns || 100)
-      const vr = Math.max(2, (surface.rows || 12) - 2)
-      if (ev.y >= vr) return
-      const dpp = w / 2 / Math.tan(DEFAULT_FOV / 2)
-      const yaw = Math.atan((ev.x + 0.5 - w / 2) / dpp)
-      const pitch = -Math.atan((((ev.y + 0.5) * 2 - vr) * SQUASH[s.squash]) / dpp)
-      act(g => actLook(g, yaw * MOUSE_PULL, pitch * MOUSE_PULL))
+      const next = { x: ev.fine?.x ?? ev.x, y: ev.fine?.y ?? ev.y, at: Date.now() }
+      const turn = lookDelta(live.pointer, next, lookView(s), SENSITIVITIES[s.sens])
+      live.pointer = next
+      // Без setState: события мыши идут пачками, и перерисовка на каждое копила бы очередь кадров.
+      // Кадр нарисует ближайший тик таймера — он увидит, что версия игры выросла.
+      if (turn.dyaw || turn.dpitch) actLook(live.game, turn.dyaw, turn.dpitch)
     })
   }
 
@@ -149,13 +165,15 @@ export default function View(props: Props, surface: ClientSurface<State>) {
   )
 
   const p = g.player
-  const where = `x ${Math.floor(p.x)} y ${Math.floor(p.y)} z ${Math.floor(p.z)}`
+  const deg = (rad: number) => Math.round((rad * 180) / Math.PI)
+  const where = `x ${Math.floor(p.x)} y ${Math.floor(p.y)} z ${Math.floor(p.z)} · курс ${(deg(p.yaw) + 360) % 360}° наклон ${deg(p.pitch)}°`
   const hint = props?.mouse === false
     ? 'клавиатуру игре даёт клик, а клики Claude Code видит только в полноэкранном режиме: /tui fullscreen, затем /mine'
     // в меню строка статуса сначала отвечает на действие («готово», «не хватает»), потом снова подсказывает
     : g.menu ? `${g.note ? `${g.note} · ` : ''}↑↓ рецепт · Enter скрафтить · i закрыть`
     : g.ticks < 200 && s.version <= 1 ? 'кликните по полю · WASD идти · ←→↑↓ или мышь смотреть · пробел прыжок · q ломать · e ставить · i крафт · v обзор · Esc к строке ввода'
-    : `${g.note || 'q/клик ломать · e/правый клик ставить · i крафт · v обзор · m мышь'} · ${where}`
+    // координаты первыми: в узком окне обрезается хвост строки, и пусть это будет подсказка
+    : `${where} · ${g.note || 'q/клик ломать · e/правый клик ставить · i крафт · v обзор · m мышь · [ ] чувствительность'}`
   const status = s.banner
     ? <Text color="yellow" bold wrap="truncate-end">{`● Claude закончил · ${hint}`}</Text>
     : <Text dimColor wrap="truncate-end">{hint}</Text>

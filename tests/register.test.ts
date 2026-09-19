@@ -58,7 +58,7 @@ describe('register', () => {
     await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
     await $.command.run(run(''))
     const ui = await $.ui.mount({ plugin: 'claude-mine', surface: 'terminal', ...band(19) })
-    await ui.post({ save: { v: 1, seed: 5, player: [0.5, 30, 0.5, 0, 0], selected: 0, inventory: '', edits: '' } }, { in: 'mine0' })
+    await ui.post({ save: { v: 1, seed: 5, player: [0.5, 30, 0.5, 0, 0], selected: 0, inventory: '', edits: '' }, in: 'mine0' })
     expect((stored.save as { seed?: number }).seed).toBe(5)
     await ui.unmount()
 
@@ -77,6 +77,36 @@ describe('register', () => {
     const ui = await $.ui.mount({ plugin: 'claude-mine', surface: 'terminal', ...band(19) })
     expect(await ui.find({ type: 'Text', text: /в руке: деревянная кирка/, in: 'mine0' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /1:бр7/, in: 'mine0' })).toBeDefined()
+    await ui.unmount()
+  })
+
+  test('мышь: взгляд поворачивается в сторону движения указателя, а не к его положению', async ($, on) => {
+    world(on)
+    await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+    await $.command.run(run(''))
+    const ui = await $.ui.mount({ plugin: 'claude-mine', surface: 'terminal', ...band(19) })
+    const course = async () => {
+      // кадр рисует тик таймера: события мыши сами перерисовку не вызывают
+      await ui.advance(100)
+      const status = await ui.find({ type: 'Text', text: /курс \d+°/, in: 'mine0' })
+      return Number(/курс (\d+)°/.exec(JSON.stringify(status))?.[1])
+    }
+    // первое действие убирает вступительную подсказку — в строке статуса появляются координаты и курс
+    await ui.key({ key: '1', in: 'mine0' })
+    expect(await course()).toBe(0)
+    // указатель в ПРАВОЙ части поля (не в зоне доворота у края) едет ВЛЕВО на 10 клеток: курс уходит влево
+    await ui.pointer({ type: 'move', x: 80, y: 5, in: 'mine0' })
+    expect(await course()).toBe(0)
+    for (let x = 79; x >= 70; x--) await ui.pointer({ type: 'move', x, y: 5, in: 'mine0' })
+    const left = await course()
+    expect(left > 330 && left < 360).toBe(true)
+    // обратно вправо на те же 10 клеток — курс вернулся
+    for (let x = 71; x <= 80; x++) await ui.pointer({ type: 'move', x, y: 5, in: 'mine0' })
+    expect(await course()).toBe(0)
+    // ушла с поля и вошла в другом месте — без рывка
+    await ui.pointer({ type: 'leave', x: 80, y: 0, in: 'mine0' })
+    await ui.pointer({ type: 'move', x: 20, y: 9, in: 'mine0' })
+    expect(await course()).toBe(0)
     await ui.unmount()
   })
 
