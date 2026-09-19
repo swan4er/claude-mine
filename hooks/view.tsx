@@ -152,7 +152,8 @@ export default function View(props: Props, surface: ClientSurface<State>) {
   const where = `x ${Math.floor(p.x)} y ${Math.floor(p.y)} z ${Math.floor(p.z)}`
   const hint = props?.mouse === false
     ? 'клавиатуру игре даёт клик, а клики Claude Code видит только в полноэкранном режиме: /tui fullscreen, затем /mine'
-    : g.menu ? '↑↓ рецепт · Enter скрафтить · i закрыть'
+    // в меню строка статуса сначала отвечает на действие («готово», «не хватает»), потом снова подсказывает
+    : g.menu ? `${g.note ? `${g.note} · ` : ''}↑↓ рецепт · Enter скрафтить · i закрыть`
     : g.ticks < 200 && s.version <= 1 ? 'кликните по полю · WASD идти · ←→↑↓ или мышь смотреть · пробел прыжок · q ломать · e ставить · i крафт · v обзор · Esc к строке ввода'
     : `${g.note || 'q/клик ломать · e/правый клик ставить · i крафт · v обзор · m мышь'} · ${where}`
   const status = s.banner
