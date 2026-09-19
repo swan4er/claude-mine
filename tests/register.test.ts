@@ -8,9 +8,13 @@ tier('user')
 
 // что движок рисует в полосе сам, «под» плагином
 const BENEATH: RenderElement = { type: 'Text', children: [''] }
+// что нарисовали соседние моды; тест может подменить
+let neighbour: RenderElement = BENEATH
 const run = (args: string) => ({ command: 'mine', args, origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 120 } }) as const
+// полноэкранный режим: maxRows — место, которое осталось полосе (на обычном экране это вся высота окна)
 const band = (maxRows: number) => ({
   component: 'AbovePrompt',
+  viewport: { columns: 120, rows: (maxRows + 6) * 2, isFullscreen: true },
   props: { hasSurvey: false, isWorking: false, maxRows, bodyColumns: 120, scroll: { offset: 0, bodyRows: maxRows }, view: {} },
 }) as const
 
@@ -24,7 +28,8 @@ function world(on: On, stored: Record<string, unknown> = {}) {
   })
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('command.register', ($, e) => ({ value: { command: e.name } }))
-  on('ui.render', { component: 'AbovePrompt' }, () => BENEATH)
+  neighbour = BENEATH
+  on('ui.render', { component: 'AbovePrompt' }, () => neighbour)
   return stored
 }
 
@@ -92,7 +97,7 @@ describe('register', () => {
       return Number(/курс (\d+)°/.exec(JSON.stringify(status))?.[1])
     }
     // первое действие убирает вступительную подсказку — в строке статуса появляются координаты и курс
-    await ui.key({ key: '1', in: 'mine0' })
+    await ui.key({ key: '2', in: 'mine0' })
     expect(await course()).toBe(0)
     // указатель в ПРАВОЙ части поля (не в зоне доворота у края) едет ВЛЕВО на 10 клеток: курс уходит влево
     await ui.pointer({ type: 'move', x: 80, y: 5, in: 'mine0' })
@@ -110,6 +115,24 @@ describe('register', () => {
     await ui.unmount()
   })
 
+  test('полоса общая: высокий сосед (Claude-чан с портретом) при открытой игре не рисуется, строка-сосед остаётся', async ($, on) => {
+    world(on)
+    const tall = { type: 'Box', props: { flexDirection: 'column' }, children: [{ type: 'Box', props: { height: 16 }, children: [] }, { type: 'Text', children: ['подсказка соседа'] }] } as RenderElement
+    const line = { type: 'Text', children: ['сосед в одну строку'] } as RenderElement
+    neighbour = tall
+    await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+    await $.command.run(run(''))
+    let ui = await $.ui.mount({ plugin: 'claude-mine', surface: 'terminal', ...band(19) })
+    expect(await ui.find({ type: 'Text', text: /в руке/, in: 'mine0' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /подсказка соседа/ })).toBeUndefined()
+    await ui.unmount()
+    neighbour = line
+    ui = await $.ui.mount({ plugin: 'claude-mine', surface: 'terminal', ...band(19) })
+    expect(await ui.find({ type: 'Text', text: /в руке/, in: 'mine0' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /сосед в одну строку/ })).toBeDefined()
+    await ui.unmount()
+  })
+
   test('в низком окне вместо игры — строка с объяснением; в обычном режиме — подсказка про мышь', async ($, on) => {
     world(on)
     await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
@@ -119,7 +142,7 @@ describe('register', () => {
     expect(await low.find({ type: 'Client' })).toBeUndefined()
     await low.unmount()
 
-    const plain = await $.ui.mount({ plugin: 'claude-mine', surface: 'terminal', viewport: { columns: 120, rows: 50, isFullscreen: false }, ...band(19) })
+    const plain = await $.ui.mount({ plugin: 'claude-mine', surface: 'terminal', ...band(38), viewport: { columns: 120, rows: 50, isFullscreen: false } })
     expect(await plain.find({ type: 'Text', text: /tui fullscreen/, in: 'mine0' })).toBeDefined()
     await plain.unmount()
   })

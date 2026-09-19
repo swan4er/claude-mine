@@ -27,7 +27,7 @@ export const EDGE_COLUMNS = 4
 export const EDGE_YAW_HOLD_MS = 1000
 export const EDGE_PITCH_HOLD_MS = 400
 // рад/с
-export const EDGE_YAW_RATE = 1.4
+export const EDGE_YAW_RATE = 0.9
 export const EDGE_PITCH_RATE = 0.9
 
 // радиан на один пиксель кадра в центре экрана

@@ -1,5 +1,6 @@
 /* @jsx h */
 import type { Register } from 'claude-code'
+import { bandRoom, gameRoom } from './band.ts'
 
 // Модуль хуков. Одна команда, /mine: открывает и закрывает игру над строкой ввода; /mine new [зерно]
 // начинает новый мир. Саму игру рисует ./view.tsx в потоке отрисовки; здесь — команда, сохранение
@@ -74,13 +75,14 @@ export const register: Register = on => {
     // игре нужны клавиши и мышь терминала; опрос занимает полосу сам
     if (!open || e.surface !== 'terminal' || e.props.hasSurvey) return next(e)
     const { Box, Client, Text } = $.ui.resolve(e)
-    // полосе достаётся примерно половина высоты терминала минус строка ввода с рамками
-    const rows = Math.min(MAX_BAND_ROWS, e.props.maxRows)
+    // полоса общая с другими модами: см. ./band.ts
+    const { room, beneath } = gameRoom(bandRoom(e.props.maxRows, e.viewport), await next(e), MIN_BAND_ROWS)
+    const rows = Math.min(MAX_BAND_ROWS, room)
     if (rows < MIN_BAND_ROWS) {
       return (
         <Box flexDirection="column">
-          <Text dimColor wrap="truncate-end">{`mine: окно низковато (над строкой ввода ${e.props.maxRows} строк из ${MIN_BAND_ROWS}) — растяните терминал хотя бы до ~30 строк, лучше до 45 · /mine закрывает`}</Text>
-          {await next(e)}
+          <Text dimColor wrap="truncate-end">{`mine: окно низковато (над строкой ввода ${room} строк из ${MIN_BAND_ROWS}) — растяните терминал хотя бы до ~30 строк, лучше до 45 · /mine закрывает`}</Text>
+          {beneath}
         </Box>
       )
     }
@@ -89,7 +91,7 @@ export const register: Register = on => {
     return (
       <Box flexDirection="column">
         <Client key={`mine${epoch}`} module="./view.tsx" width={e.props.bodyColumns} height={rows} props={{ save: save ?? null, seed, done: turnsDone, mouse, rows }} />
-        {await next(e)}
+        {beneath}
       </Box>
     )
   })
